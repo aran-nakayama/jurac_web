@@ -194,7 +194,19 @@ class FileInfo(BaseModel):
     filename: str
     file_id: str
 
-@app.get("/api/files")
+@app.get("/health")
+async def health_check():
+    """
+    ヘルスチェック用エンドポイント
+    """
+    try:
+        # アプリケーションの内部状態を確認したい場合は、ここで追加のチェックを実施
+        return JSONResponse(content={"status": "ok", "message": "Application is healthy"}, status_code=200)
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Health check failed")
+
+@app.get("/files")
 async def list_files():
     try:
         # vector_store_idが設定されているか確認
@@ -223,7 +235,7 @@ async def list_files():
         logger.error(f"Error listing files: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/upload")
+@app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     try:
         # vector_store_idが設定されているか確認し、必要に応じて初期化
@@ -241,7 +253,7 @@ async def upload_file(file: UploadFile = File(...)):
         logger.error(f"Error uploading file: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.delete("/api/files/{file_id}")
+@app.delete("/files/{file_id}")
 async def delete_file(file_id: str):
     try:
         # Vector Storeからファイルを削除
@@ -261,7 +273,7 @@ async def delete_file(file_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 # 一括削除機能を追加
-@app.delete("/api/files")
+@app.delete("/files")
 async def delete_all_files():
     try:
         # Vector Store内のすべてのファイルを削除
@@ -284,7 +296,7 @@ async def delete_all_files():
 
 assistant = Assistant()
 
-@app.post("/api/chat")
+@app.post("/chat")
 async def chat(message: Message):
     try:
         logger.info(f"Received message: {message.text}")
@@ -402,7 +414,7 @@ async def chat(message: Message):
         logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/system-info")
+@app.get("/system-info")
 async def get_system_info():
     try:
         # 初期化されていない場合は初期化を実行
@@ -417,7 +429,7 @@ async def get_system_info():
         logger.error(f"Error getting system info: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/vector-stores")
+@app.get("/vector-stores")
 async def list_vector_stores():
     try:
         vector_stores = await client.beta.vector_stores.list()
@@ -435,7 +447,7 @@ async def list_vector_stores():
         logger.error(f"Error listing vector stores: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/initialize-assistant")
+@app.post("/initialize-assistant")
 async def initialize_assistant(request: dict):
     try:
         vector_store_id = request.get("vector_store_id")
@@ -491,7 +503,7 @@ async def initialize_assistant(request: dict):
         logger.error(f"Error initializing assistant: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/check-assistant")
+@app.get("/check-assistant")
 async def check_assistant():
     try:
         if assistant.assistant_id:
@@ -509,7 +521,7 @@ async def check_assistant():
         logger.error(f"Error checking assistant: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/upload-image")
+@app.post("/upload-image")
 async def upload_image(file: UploadFile = File(...)):
     try:
         # ファイルの内容を読み込む
@@ -539,7 +551,7 @@ async def upload_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ファイルダウンロード用のエンドポイントを追加
-@app.get("/api/files/{file_id}/download")
+@app.get("/files/{file_id}/download")
 async def download_file(file_id: str):
     try:
         file_metadata = await client.files.retrieve(file_id)
