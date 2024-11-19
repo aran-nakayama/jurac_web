@@ -97,12 +97,10 @@ Resources:
               ImageTag: latest
           ImageRepositoryType: "ECR"
           ImageConfiguration:
-            Port: 5050
+            Port: 8000
             RuntimeEnvironmentVariables:
               - Name: OPENAI_API_KEY
                 Value: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/twilio-openai-api-key"
-              - Name: PORT
-                Value: "5050"
       InstanceConfiguration:
         Cpu: !Ref CpuUnit
         Memory: !Ref MemorySize
