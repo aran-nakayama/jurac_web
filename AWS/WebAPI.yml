@@ -27,6 +27,19 @@ Parameters:
     Type: "Number"
     Default: 4096
 
+  ManagedRulesCountMode:
+    Description: Choose whether to set waf managed rules in count mode.
+    Type: String
+    Default: true
+    AllowedValues:
+      - true
+      - false
+
+Conditions:
+  IsCountMode: !Equals
+    - !Ref ManagedRulesCountMode
+    - true
+
 # ------------------------------------------------------------#
 # Resources
 # ------------------------------------------------------------#
@@ -82,7 +95,7 @@ Resources:
     Properties:
       AutoScalingConfigurationArn: !GetAtt APIServiceAutoScalingConfiguration.AutoScalingConfigurationArn
       HealthCheckConfiguration:
-        Path: /health
+        Path: /api/health
         Protocol: HTTP
       ServiceName: !Sub ${ProjectName}-${PurposeName}-webapi
       SourceConfiguration:
@@ -97,10 +110,7 @@ Resources:
               ImageTag: latest
           ImageRepositoryType: "ECR"
           ImageConfiguration:
-            Port: 8000
-            RuntimeEnvironmentVariables:
-              - Name: PORT
-                Value: "8000"
+            Port: 80
             RuntimeEnvironmentSecrets:
               - Name: OPENAI_API_KEY
                 Value: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/twilio-openai-api-key"
@@ -108,3 +118,166 @@ Resources:
         Cpu: !Ref CpuUnit
         Memory: !Ref MemorySize
         InstanceRoleArn: !GetAtt "APIInstanceRole.Arn"
+
+# ------------------------------------------------------------#
+# IPSet
+# ------------------------------------------------------------#
+  # App Runner WAF 用 開発拠点 IPSet
+  DeveloperIPSet:
+    Type: AWS::WAFv2::IPSet
+    Properties:
+      Name: !Sub ${ProjectName}-${PurposeName}-developers-api
+      Description: !Sub ${ProjectName}-${PurposeName}-developers-api
+      Scope: REGIONAL
+      IPAddressVersion: IPV4
+      Addresses:
+        # Fenrir
+        - "42.125.229.42/32"
+        - "137.83.213.180/32"
+        - "137.83.213.197/32"
+        - "134.238.7.18/32"
+        - "134.238.7.37/32"
+        - "137.83.213.182/32"
+        - "208.127.111.171/32"
+        - "133.242.224.4/32"
+        # pia
+        - "202.238.174.38/32"
+        - "150.195.219.184/32"
+        - "150.195.211.98/32"
+
+# ------------------------------------------------------------#
+# WAF for App Runner
+# ------------------------------------------------------------#
+  WebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub ${ProjectName}-${PurposeName}-WebACL-api
+      Scope: REGIONAL
+      DefaultAction:
+         Block: {} #検証環境の場合はBlock
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub ${ProjectName}-${PurposeName}-WebACL-api
+      Rules:
+        # - Name: allow-only-custom-domain
+        #   Priority: 0
+        #   Action:
+        #     Block: {}
+        #   Statement:
+        #     NotStatement:
+        #       Statement:
+        #         ByteMatchStatement:
+        #           FieldToMatch:
+        #             SingleHeader:
+        #               Name: host
+        #           PositionalConstraint: EXACTLY
+        #           SearchString: !Ref CustomDomain
+        #           TextTransformations:
+        #             - Priority: 0
+        #               Type: LOWERCASE
+        #   VisibilityConfig:
+        #     SampledRequestsEnabled: true
+        #     CloudWatchMetricsEnabled: true
+        #     MetricName: allow-only-custom-domain
+        - Name: CoreRuleSet
+          Priority: 1
+          OverrideAction: !If
+            - IsCountMode
+            - Count: {}
+            - None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            SampledRequestsEnabled: true
+            MetricName: CoreRuleSet
+        - Name: KnownBadInputs
+          OverrideAction: !If
+            - IsCountMode
+            - Count: {}
+            - None: {}
+          Priority: 2
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            SampledRequestsEnabled: true
+            MetricName: KnownBadInputs
+        - Name: LinuxOperatingSystem
+          OverrideAction: !If
+            - IsCountMode
+            - Count: {}
+            - None: {}
+          Priority: 3
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesLinuxRuleSet
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            SampledRequestsEnabled: true
+            MetricName: LinuxOperatingSystem
+        - Name: POSIXOperatingSystem
+          OverrideAction: !If
+            - IsCountMode
+            - Count: {}
+            - None: {}
+          Priority: 4
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesUnixRuleSet
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            SampledRequestsEnabled: true
+            MetricName: POSIXOperatingSystem
+        - Name: AmazonIPReputationList
+          OverrideAction: !If
+            - IsCountMode
+            - Count: {}
+            - None: {}
+          Priority: 5
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAmazonIpReputationList
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: AmazonIPReputationList
+            SampledRequestsEnabled: true
+        - Name: AnonymousIPList
+          OverrideAction: !If
+            - IsCountMode
+            - Count: {}
+            - None: {}
+          Priority: 6
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAnonymousIpList
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            SampledRequestsEnabled: true
+            MetricName: AnonymousIPList
+        - Name: ipv4-addresses-white-list
+          Priority: 7
+          Action:
+            Allow: {}
+          Statement:
+            IPSetReferenceStatement:
+              Arn: !GetAtt DeveloperIPSet.Arn
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            MetricName: ipv4-addresses-white-list
+            CloudWatchMetricsEnabled: true
+
+  WebACLAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      WebACLArn: !GetAtt WebACL.Arn
+      ResourceArn: !GetAtt APIService.ServiceArn
