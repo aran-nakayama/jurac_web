@@ -82,7 +82,7 @@ Resources:
     Properties:
       AutoScalingConfigurationArn: !GetAtt APIServiceAutoScalingConfiguration.AutoScalingConfigurationArn
       HealthCheckConfiguration:
-        Path: /api/health
+        Path: /health
         Protocol: HTTP
       ServiceName: !Sub ${ProjectName}-${PurposeName}-webapi
       SourceConfiguration:
