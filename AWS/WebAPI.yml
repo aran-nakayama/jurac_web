@@ -101,6 +101,8 @@ Resources:
             RuntimeEnvironmentVariables:
               - Name: OPENAI_API_KEY
                 Value: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/twilio-openai-api-key"
+              - Name: PORT
+                Value: "8000"
       InstanceConfiguration:
         Cpu: !Ref CpuUnit
         Memory: !Ref MemorySize
