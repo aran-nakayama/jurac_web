@@ -13,8 +13,8 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ .
 
-# 最終イメージ
-FROM python:3.10-slim
+# Linux AMD64アーキテクチャ用のPython 3.10をベースとしたイメージを指定
+FROM --platform=linux/amd64 python:3.10-slim
 
 # Nginxのインストール
 RUN apt-get update && apt-get install -y nginx && rm -rf /var/lib/apt/lists/*
