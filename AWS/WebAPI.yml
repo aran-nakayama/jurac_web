@@ -1,0 +1,109 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "PIA - WebAPI"
+
+# ------------------------------------------------------------#
+# Input Parameters
+# ------------------------------------------------------------#
+
+Parameters:
+
+  ProjectName:
+    Description: "Project Name"
+    Type: "String"
+    Default: "pia"
+
+  PurposeName:
+    Description: "Purpose Name"
+    Type: "String"
+    Default: "demo"
+
+  CpuUnit:
+    Description: "CPU unit number of task"
+    Type: "Number"
+    Default: 2048
+
+  MemorySize:
+    Description: "Memory MiB number of task"
+    Type: "Number"
+    Default: 4096
+
+# ------------------------------------------------------------#
+# Resources
+# ------------------------------------------------------------#
+
+Resources:
+  AccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-${PurposeName}-AppRunnerECRAccessRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - build.apprunner.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
+
+  APIInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - tasks.apprunner.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: "AllowAccess"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameters
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*
+
+  APIServiceAutoScalingConfiguration:
+    Type: AWS::AppRunner::AutoScalingConfiguration
+    Properties:
+      AutoScalingConfigurationName: !Sub ${ProjectName}-${PurposeName}-AutoScaling
+      MaxConcurrency: 100
+      MaxSize: 25
+      MinSize: 1
+
+  APIService:
+    Type: AWS::AppRunner::Service
+    Properties:
+      AutoScalingConfigurationArn: !GetAtt APIServiceAutoScalingConfiguration.AutoScalingConfigurationArn
+      HealthCheckConfiguration:
+        Path: /api/health
+        Protocol: HTTP
+      ServiceName: !Sub ${ProjectName}-${PurposeName}-webapi
+      SourceConfiguration:
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt "AccessRole.Arn"
+        AutoDeploymentsEnabled: true
+        ImageRepository:
+          ImageIdentifier: !Sub
+            - "${WebAPIRepositoryUri}:${ImageTag}"
+            - WebAPIRepositoryUri:
+                { Fn::ImportValue: !Sub "${ProjectName}-${PurposeName}-repository-uri" }
+              ImageTag: latest
+          ImageRepositoryType: "ECR"
+          ImageConfiguration:
+            Port: 5050
+            RuntimeEnvironmentVariables:
+              - Name: OPENAI_API_KEY
+                Value: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/twilio-openai-api-key"
+              - Name: PORT
+                Value: "5050"
+      InstanceConfiguration:
+        Cpu: !Ref CpuUnit
+        Memory: !Ref MemorySize
+        InstanceRoleArn: !GetAtt "APIInstanceRole.Arn"

@@ -1,0 +1,51 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "PIA - Repository"
+
+# ------------------------------------------------------------#
+# Input Parameters
+# ------------------------------------------------------------#
+
+Parameters:
+
+  ProjectName:
+    Description: "Project Name"
+    Type: "String"
+    Default: "pia"
+
+  PurposeName:
+    Description: "Purpose Name"
+    Type: "String"
+    Default: "demo"
+
+# ------------------------------------------------------------#
+# Resources
+# ------------------------------------------------------------#
+
+Resources:
+  PIAECRRepository:
+    Type: "AWS::ECR::Repository"
+    Properties:
+      RepositoryName: !Sub "${ProjectName}-${PurposeName}"
+      EncryptionConfiguration: { EncryptionType: "AES256" }
+      ImageScanningConfiguration: { ScanOnPush: true }
+      ImageTagMutability: "MUTABLE"
+
+# ------------------------------------------------------------#
+# Outputs
+# ------------------------------------------------------------#
+
+Outputs:
+  PIAECRRepositoryName:
+    Description: "PIA ECR Repository"
+    Value: !Ref PIAECRRepository
+    Export: { Name: !Sub "${ProjectName}-${PurposeName}-repository-name" }
+
+  PIAECRRepositoryArn:
+    Description: "PIA ECR Repository ARN"
+    Value: !GetAtt PIAECRRepository.Arn
+    Export: { Name: !Sub "${ProjectName}-${PurposeName}-repository-arn" }
+
+  PIAECRRepositoryUri:
+    Description: "PIA ECR Repository URI"
+    Value: !GetAtt PIAECRRepository.RepositoryUri
+    Export: { Name: !Sub "${ProjectName}-${PurposeName}-repository-uri" }
